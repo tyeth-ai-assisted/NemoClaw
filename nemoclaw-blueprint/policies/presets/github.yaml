@@ -20,7 +20,7 @@
 
 preset:
   name: github
-  description: "GitHub.com and GitHub API access (git)"
+  description: "GitHub.com, GitHub API, and GitHub release asset downloads"
 
 network_policies:
   github:
@@ -32,5 +32,12 @@ network_policies:
       - host: api.github.com
         port: 443
         access: full
-    binaries:
-      - { path: /usr/bin/git }
+      - host: release-assets.githubusercontent.com
+        port: 443
+        access: full
+      - host: objects.githubusercontent.com
+        port: 443
+        access: full
+      - host: pkg-containers.githubusercontent.com
+        port: 443
+        access: full
