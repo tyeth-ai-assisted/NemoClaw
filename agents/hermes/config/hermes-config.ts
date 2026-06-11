@@ -51,9 +51,10 @@ function hermesApiMode(inferenceApi: string): string | null {
 
 export function buildHermesConfig(settings: HermesBuildSettings): Record<string, unknown> {
   const remotePlatformToolsets = [...REMOTE_PLATFORM_TOOLSETS];
+  const providerName = settings.upstreamProvider || "nemoclaw-inference";
   const modelConfig: Record<string, unknown> = {
     default: settings.model,
-    provider: "custom",
+    provider: providerName,
     base_url: settings.baseUrl,
     api_key: "sk-OPENSHELL-PROXY-REWRITE",
   };
@@ -72,7 +73,6 @@ export function buildHermesConfig(settings: HermesBuildSettings): Record<string,
   // Hermes' default, but we set it explicitly so the intent survives upstream
   // default changes, and we omit an explicit `models:` list precisely so the
   // picker reflects the live catalog rather than a single hard-coded id.
-  const providerName = settings.upstreamProvider || "nemoclaw-inference";
   const customProvider: Record<string, unknown> = {
     name: providerName,
     base_url: settings.baseUrl,
@@ -80,6 +80,14 @@ export function buildHermesConfig(settings: HermesBuildSettings): Record<string,
     discover_models: true,
   };
   if (apiMode) customProvider.api_mode = apiMode;
+  const providerConfig: Record<string, unknown> = {
+    name: providerName,
+    api: settings.baseUrl,
+    api_key: "sk-OPENSHELL-PROXY-REWRITE",
+    default_model: settings.model,
+    discover_models: true,
+  };
+  if (apiMode) providerConfig.transport = apiMode;
 
   const upstream: Record<string, unknown> = {
     provider: settings.upstreamProvider,
@@ -90,6 +98,9 @@ export function buildHermesConfig(settings: HermesBuildSettings): Record<string,
     _config_version: 12,
     _nemoclaw_upstream: upstream,
     model: modelConfig,
+    providers: {
+      [providerName]: providerConfig,
+    },
     custom_providers: [customProvider],
     terminal: {
       backend: "local",
