@@ -203,6 +203,17 @@ if [ ! -f "$_HERMES_BOUNDARY_VALIDATOR" ]; then
   _HERMES_BOUNDARY_VALIDATOR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/validate-env-secret-boundary.py"
 fi
 
+# Resolve the dashboard config seeder (same install/dev-fallback pattern as the
+# boundary validator above). The Hermes dashboard runs under its own
+# HERMES_DASHBOARD_HOME, so it never sees the model/custom_providers block
+# NemoClaw writes to the gateway config; this script mirrors those routing keys
+# into the dashboard config so the Models page and kanban specifier/dispatcher
+# resolve the routed model.
+_HERMES_DASHBOARD_CONFIG_SEEDER="/usr/local/lib/nemoclaw/seed-hermes-dashboard-config.py"
+if [ ! -f "$_HERMES_DASHBOARD_CONFIG_SEEDER" ]; then
+  _HERMES_DASHBOARD_CONFIG_SEEDER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/seed-dashboard-config.py"
+fi
+
 truthy_env() {
   case "$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')" in
     1 | true | yes | on) return 0 ;;
@@ -645,6 +656,45 @@ prepare_hermes_dashboard_home() {
     chown "$owner" "$HERMES_DASHBOARD_HOME"
   fi
   chmod 700 "$HERMES_DASHBOARD_HOME"
+  # The dashboard can attempt a gateway restart from its isolated HERMES_HOME.
+  # In NemoClaw the real gateway lives under /sandbox/.hermes, so a failed
+  # dashboard-scoped restart can leave stale startup_failed state that poisons
+  # /api/status even while the real gateway is healthy.
+  rm -f "${HERMES_DASHBOARD_HOME}/gateway_state.json" 2>/dev/null || true
+  seed_hermes_dashboard_config "$owner"
+}
+
+# Mirror the gateway's model routing and dotenv context into the dashboard's
+# isolated HERMES_HOME so its Models page (/api/model/options), Chat/TUI setup
+# checks, and kanban specifier/dispatcher resolve the routed model. The
+# dashboard runs under HERMES_DASHBOARD_HOME for privilege separation and
+# otherwise only sees a Hermes-default config with an empty model. Idempotent:
+# refreshes the keys on every launch. Best-effort — a seed failure must not
+# block the dashboard.
+seed_hermes_dashboard_config() {
+  local owner="${1:-}"
+  local dst="${HERMES_DASHBOARD_HOME}/config.yaml"
+  local env_dst="${HERMES_DASHBOARD_HOME}/.env"
+  local rc=0
+
+  python3 "$_HERMES_DASHBOARD_CONFIG_SEEDER" \
+    "${HERMES_DIR}/config.yaml" "$dst" \
+    "${HERMES_DIR}/.env" "$env_dst" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "[dashboard] WARN: config seed exited ${rc}; Models page or Chat may show setup incomplete" >&2
+    return 0
+  fi
+
+  # The seeder runs as root on the privilege-separated path; hand the file back
+  # to the dashboard user (its HERMES_HOME is chmod 700) so it can read/rewrite it.
+  for _dashboard_seeded_file in "$dst" "$env_dst"; do
+    if [ -f "$_dashboard_seeded_file" ]; then
+      if [ "$(id -u)" -eq 0 ] && [ -n "$owner" ]; then
+        chown "$owner" "$_dashboard_seeded_file" 2>/dev/null || true
+      fi
+      chmod 600 "$_dashboard_seeded_file" 2>/dev/null || true
+    fi
+  done
 }
 
 start_hermes_dashboard_current_user() {
@@ -658,6 +708,7 @@ start_hermes_dashboard_current_user() {
   echo "[gateway] hermes dashboard launched (pid $DASHBOARD_PID)" >&2
   start_dashboard_log_stream
   start_socat_forwarder "$DASHBOARD_PUBLIC_PORT" "$DASHBOARD_INTERNAL_PORT" "dashboard" DASHBOARD_SOCAT_PID
+  seed_hermes_dashboard_config ""
 }
 
 start_hermes_dashboard_sandbox_user() {
@@ -671,15 +722,23 @@ start_hermes_dashboard_sandbox_user() {
   echo "[gateway] hermes dashboard launched as 'sandbox' user (pid $DASHBOARD_PID)" >&2
   start_dashboard_log_stream
   start_socat_forwarder "$DASHBOARD_PUBLIC_PORT" "$DASHBOARD_INTERNAL_PORT" "dashboard" DASHBOARD_SOCAT_PID
+  seed_hermes_dashboard_config sandbox:sandbox
 }
 
 wait_for_hermes_gateway_internal() {
   local gateway_pid="$1"
   local attempts=0
+  local code
   while [ "$attempts" -lt 60 ]; do
-    if curl -sf --max-time 2 "http://127.0.0.1:${INTERNAL_PORT}/health" >/dev/null 2>&1; then
-      return 0
-    fi
+    # Status-code extraction (not curl -sf) so a 401 counts as alive: Hermes
+    # v0.16.0+ may guard the api_server with API_SERVER_KEY, and the probe is
+    # unauthenticated. A 401 still proves the gateway is bound and serving.
+    # Mirrors GATEWAY_ALIVE_CODES in src/lib/verify-deployment.ts.
+    code=$(curl -so /dev/null -w '%{http_code}' --max-time 2 \
+      "http://127.0.0.1:${INTERNAL_PORT}/health" 2>/dev/null || echo 000)
+    case "$code" in
+      200 | 401) return 0 ;;
+    esac
     if ! kill -0 "$gateway_pid" 2>/dev/null; then
       wait "$gateway_pid"
       return $?

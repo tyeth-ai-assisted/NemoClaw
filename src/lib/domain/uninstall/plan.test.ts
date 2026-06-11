@@ -51,10 +51,7 @@ describe("uninstall plan", () => {
     const stoppingServicesStep = plan.steps.find((step) => step.name === "Stopping services");
     expect(stoppingServicesStep).toBeTruthy();
     expect(stoppingServicesStep?.actions).toEqual(
-      expect.arrayContaining([
-        { kind: "stop-ollama-auth-proxy" },
-        { kind: "stop-model-router" },
-      ]),
+      expect.arrayContaining([{ kind: "stop-ollama-auth-proxy" }, { kind: "stop-model-router" }]),
     );
   });
 

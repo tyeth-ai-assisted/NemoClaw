@@ -530,10 +530,7 @@ function stopModelRouter(paths: UninstallPaths, runtime: UninstallRuntime): void
   if (runtime.existsSync(sessionFile)) {
     try {
       const raw: unknown = JSON.parse(fs.readFileSync(sessionFile, "utf-8"));
-      const pid = Number.parseInt(
-        String((raw as Record<string, unknown>)?.routerPid ?? ""),
-        10,
-      );
+      const pid = Number.parseInt(String((raw as Record<string, unknown>)?.routerPid ?? ""), 10);
       if (
         Number.isFinite(pid) &&
         pid > 0 &&

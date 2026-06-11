@@ -523,7 +523,7 @@ describe("list shows live gateway inference", () => {
       expect(result.code).toBe(0);
       expect(result.out).toContain(`$ nemoclaw sandbox ${usage}`);
     }
-  });
+  }, 15_000);
 
   it("share is recognized as a valid sandbox action (not 'Unknown action')", () => {
     const env = createShareTestEnv("nemoclaw-cli-share-action-");

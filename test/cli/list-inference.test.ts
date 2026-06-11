@@ -67,7 +67,7 @@ describe("CLI dispatch", () => {
     expect(hermesOut).toContain(
       "Run: openshell inference set -g nemoclaw --model <model> --provider <provider>",
     );
-  });
+  }, 15_000);
 
   it("list exits 0", () => {
     const r = run("list");

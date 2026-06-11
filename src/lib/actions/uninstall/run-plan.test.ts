@@ -1013,7 +1013,10 @@ describe("uninstall run plan", () => {
     const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), "nemoclaw-uninstall-test-5169-pid-"));
     const stateDir = path.join(tmpHome, ".nemoclaw");
     fs.mkdirSync(stateDir, { recursive: true });
-    fs.writeFileSync(path.join(stateDir, "onboard-session.json"), JSON.stringify({ routerPid: 54321 }));
+    fs.writeFileSync(
+      path.join(stateDir, "onboard-session.json"),
+      JSON.stringify({ routerPid: 54321 }),
+    );
 
     try {
       const stub = routerPsStub("54321", { exited });

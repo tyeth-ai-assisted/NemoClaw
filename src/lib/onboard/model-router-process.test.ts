@@ -70,10 +70,8 @@ describe("findModelRouterPidForPort", () => {
   it("returns the first matching PID when multiple model-routers are present", () => {
     const pid = findModelRouterPidForPort(4000, {
       readProcCommandLine: (p) => {
-        if (p === 100)
-          return ["/opt/model-router", "proxy", "--port", "4000"];
-        if (p === 200)
-          return ["/opt/model-router", "proxy", "--port", "4000"];
+        if (p === 100) return ["/opt/model-router", "proxy", "--port", "4000"];
+        if (p === 200) return ["/opt/model-router", "proxy", "--port", "4000"];
         return null;
       },
       listProcPids: () => [50, 100, 200],
