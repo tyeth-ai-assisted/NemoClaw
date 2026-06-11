@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import { randomBytes } from "node:crypto";
 import type { DiscordGuilds, MessagingAllowedIds, SlackConfig, WechatConfig } from "./build-env.ts";
 import { loadManagedToolGatewayMatrix } from "./managed-tool-gateway.ts";
 
@@ -27,7 +28,11 @@ export function buildMessagingEnvLines(
   slackConfig: SlackConfig,
   managedToolGatewayPresets: string[] = [],
 ): string[] {
-  const envLines = ["API_SERVER_PORT=18642", "API_SERVER_HOST=127.0.0.1"];
+  const envLines = [
+    "API_SERVER_PORT=18642",
+    "API_SERVER_HOST=127.0.0.1",
+    `API_SERVER_KEY=${randomBytes(32).toString("hex")}`,
+  ];
 
   if (managedToolGatewayPresets.length > 0) {
     const matrix = loadManagedToolGatewayMatrix();
