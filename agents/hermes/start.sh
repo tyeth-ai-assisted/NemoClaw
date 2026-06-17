@@ -181,8 +181,6 @@ if [ "$DASHBOARD_PUBLIC_PORT" -eq "$DASHBOARD_INTERNAL_PORT" ]; then
   DASHBOARD_INTERNAL_PORT=19120
 fi
 HERMES_DASHBOARD_TUI="${NEMOCLAW_HERMES_DASHBOARD_TUI:-${HERMES_DASHBOARD_TUI:-0}}"
-HERMES_DASHBOARD_HOME="${HERMES_DASHBOARD_HOME:-/tmp/hermes-dashboard-home}"
-HERMES="$(command -v hermes)" # Resolve once, use absolute path everywhere
 
 # Hermes resolves config and runtime state relative to HERMES_HOME. The config
 # root is mutable by the sandbox owner and readable by the gateway group. The
@@ -190,7 +188,9 @@ HERMES="$(command -v hermes)" # Resolve once, use absolute path everywhere
 # create new top-level state while the gateway user cannot remove config files.
 # Immutability is opt-in via `shields up`.
 HERMES_DIR="/sandbox/.hermes"
+HERMES_DASHBOARD_HOME="${HERMES_DASHBOARD_HOME:-${HERMES_DIR}}"
 HERMES_HASH_FILE="/etc/nemoclaw/hermes.config-hash"
+HERMES="$(command -v hermes)" # Resolve once, use absolute path everywhere
 
 # Resolve the standalone secret-boundary validator. The container ships it at
 # the installed path; the dev fallback resolves against the script directory so
@@ -204,11 +204,9 @@ if [ ! -f "$_HERMES_BOUNDARY_VALIDATOR" ]; then
 fi
 
 # Resolve the dashboard config seeder (same install/dev-fallback pattern as the
-# boundary validator above). The Hermes dashboard runs under its own
-# HERMES_DASHBOARD_HOME, so it never sees the model/custom_providers block
-# NemoClaw writes to the gateway config; this script mirrors those routing keys
-# into the dashboard config so the Models page and kanban specifier/dispatcher
-# resolve the routed model.
+# boundary validator above). This script mirrors NemoClaw's
+# model/custom_providers routing keys into the dashboard config so the Models
+# page and kanban specifier/dispatcher resolve the routed model.
 _HERMES_DASHBOARD_CONFIG_SEEDER="/usr/local/lib/nemoclaw/seed-hermes-dashboard-config.py"
 if [ ! -f "$_HERMES_DASHBOARD_CONFIG_SEEDER" ]; then
   _HERMES_DASHBOARD_CONFIG_SEEDER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/seed-dashboard-config.py"
@@ -665,23 +663,21 @@ prepare_hermes_dashboard_home() {
     echo "[SECURITY] Refusing Hermes dashboard startup because ${HERMES_DASHBOARD_HOME} is not a safe directory" >&2
     return 1
   fi
-  if [ "$(id -u)" -eq 0 ] && [ -n "$owner" ]; then
-    chown "$owner" "$HERMES_DASHBOARD_HOME"
+  if [ "$HERMES_DASHBOARD_HOME" != "$HERMES_DIR" ]; then
+    if [ "$(id -u)" -eq 0 ] && [ -n "$owner" ]; then
+      chown "$owner" "$HERMES_DASHBOARD_HOME"
+    fi
+    chmod 700 "$HERMES_DASHBOARD_HOME"
   fi
-  chmod 700 "$HERMES_DASHBOARD_HOME"
-  # The dashboard can attempt a gateway restart from its isolated HERMES_HOME.
-  # In NemoClaw the real gateway lives under /sandbox/.hermes, so a failed
-  # dashboard-scoped restart can leave stale startup_failed state that poisons
-  # /api/status even while the real gateway is healthy.
+  # The dashboard can attempt a gateway restart. Keep stale startup_failed state
+  # from poisoning /api/status across restarts while the real gateway is healthy.
   rm -f "${HERMES_DASHBOARD_HOME}/gateway_state.json" 2>/dev/null || true
   seed_hermes_dashboard_config "$owner"
 }
 
 # Mirror the gateway's model routing and dotenv context into the dashboard's
-# isolated HERMES_HOME so its Models page (/api/model/options), Chat/TUI setup
-# checks, and kanban specifier/dispatcher resolve the routed model. The
-# dashboard runs under HERMES_DASHBOARD_HOME for privilege separation and
-# otherwise only sees a Hermes-default config with an empty model. Idempotent:
+# HERMES_HOME so its Models page (/api/model/options), Chat/TUI setup checks,
+# and kanban specifier/dispatcher resolve the routed model. Idempotent:
 # refreshes the keys on every launch. Best-effort — a seed failure must not
 # block the dashboard.
 seed_hermes_dashboard_config() {

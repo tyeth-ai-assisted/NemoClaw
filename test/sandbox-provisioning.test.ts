@@ -1144,6 +1144,25 @@ describe("Hermes sandbox provisioning", () => {
     }
   });
 
+  it("uses /sandbox/.hermes for the Hermes dashboard home and runs doctor before lockdown", () => {
+    const startScript = fs.readFileSync(path.join(ROOT, "agents", "hermes", "start.sh"), "utf-8");
+    expect(startScript).toContain('HERMES_DIR="/sandbox/.hermes"');
+    expect(startScript).toContain(
+      'HERMES_DASHBOARD_HOME="${HERMES_DASHBOARD_HOME:-${HERMES_DIR}}"',
+    );
+    expect(startScript).toContain('if [ "$HERMES_DASHBOARD_HOME" != "$HERMES_DIR" ]; then');
+    expect(startScript).not.toContain("/tmp/hermes-dashboard-home");
+
+    const dockerfile = fs.readFileSync(HERMES_DOCKERFILE, "utf-8");
+    const doctorIndex = dockerfile.indexOf("RUN HERMES_HOME=/sandbox/.hermes hermes doctor --fix");
+    const lockdownIndex = dockerfile.indexOf("# Set mutable-default permissions");
+    const hashIndex = dockerfile.indexOf("# Pin config hash at build time");
+
+    expect(doctorIndex).toBeGreaterThan(-1);
+    expect(lockdownIndex).toBeGreaterThan(doctorIndex);
+    expect(hashIndex).toBeGreaterThan(doctorIndex);
+  });
+
   it("adds root to the Hermes sandbox group during base user setup", () => {
     const { result, calls, tmp, sandboxRoot } = runHermesUserSetupBlock();
     try {

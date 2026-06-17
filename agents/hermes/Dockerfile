@@ -191,6 +191,11 @@ RUN mkdir -p /sandbox/.hermes/memories \
     'You are Hermes Agent, an intelligent AI assistant created by Nous Research. You are helpful, knowledgeable, and direct. You assist users with a wide range of tasks including answering questions, writing and editing code, analyzing information, creative work, and executing actions via your tools. You communicate clearly, admit uncertainty when appropriate, and prioritize being genuinely useful over being verbose unless otherwise directed below. Be targeted and efficient in your exploration and investigations.' \
     > /sandbox/.hermes/SOUL.md
 
+# Let Hermes 0.16+ finish any home/config migrations while the image is still
+# mutable. This must run before the final root-owned permission/hash lockdown.
+# hadolint ignore=DL3059
+RUN HERMES_HOME=/sandbox/.hermes hermes doctor --fix
+
 # Describe the execution environment via Hermes's dedicated environment-hint
 # mechanism (agent/prompt_builder.py:build_environment_hints). This lands in
 # the system prompt's environment slot, not the identity slot, and is read once
